@@ -473,3 +473,99 @@ resource "aws_elasticache_cluster" "redis" {
   })
 }
 
+######################################
+# CloudWatch Logs
+######################################
+
+resource "aws_cloudwatch_log_group" "api" {
+  name              = "/ecs/api"
+  retention_in_days = 7
+}
+
+resource "aws_cloudwatch_log_group" "dashboard" {
+  name              = "/ecs/dashboard"
+  retention_in_days = 7
+}
+
+resource "aws_cloudwatch_log_group" "worker" {
+  name              = "/ecs/worker"
+  retention_in_days = 7
+}
+
+######################################
+# IAM
+######################################
+
+data "aws_iam_policy_document" "ecs_task_assume_role" {
+  statement {
+    effect = "Allow"
+
+    principals {
+      type        = "Service"
+      identifiers = ["ecs-tasks.amazonaws.com"]
+    }
+
+    actions = ["sts:AssumeRole"]
+  }
+}
+
+resource "aws_iam_role" "ecs_execution_role" {
+  name               = "${local.prefix}-ecs-execution-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+}
+
+resource "aws_iam_role_policy_attachment" "ecs_execution_managed" {
+  role       = aws_iam_role.ecs_execution_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role" "api_task_role" {
+  name               = "${local.prefix}-api-task-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+}
+
+resource "aws_iam_role" "dashboard_task_role" {
+  name               = "${local.prefix}-dashboard-task-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+}
+
+resource "aws_iam_role" "worker_task_role" {
+  name               = "${local.prefix}-worker-task-role"
+  assume_role_policy = data.aws_iam_policy_document.ecs_task_assume_role.json
+}
+
+data "aws_iam_policy_document" "api_sqs_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "sqs:SendMessage"
+    ]
+    resources = [aws_sqs_queue.click_events.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "api_sqs" {
+  name   = "${local.prefix}-api-sqs-policy"
+  role   = aws_iam_role.api_task_role.id
+  policy = data.aws_iam_policy_document.api_sqs_policy.json
+}
+
+data "aws_iam_policy_document" "worker_sqs_policy" {
+  statement {
+    effect = "Allow"
+    actions = [
+      "sqs:ReceiveMessage",
+      "sqs:DeleteMessage",
+      "sqs:GetQueueAttributes",
+      "sqs:ChangeMessageVisibility"
+    ]
+    resources = [aws_sqs_queue.click_events.arn]
+  }
+}
+
+resource "aws_iam_role_policy" "worker_sqs" {
+  name   = "${local.prefix}-worker-sqs-policy"
+  role   = aws_iam_role.worker_task_role.id
+  policy = data.aws_iam_policy_document.worker_sqs_policy.json
+}
+
