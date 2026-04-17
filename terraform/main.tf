@@ -656,3 +656,217 @@ resource "aws_lb_listener_rule" "dashboard" {
   }
 }
 
+######################################
+# ECS
+######################################
+
+resource "aws_ecs_cluster" "main" {
+  name = "${local.prefix}-cluster"
+}
+
+resource "aws_ecs_task_definition" "api" {
+  family                   = "api-task"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn            = aws_iam_role.api_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "api"
+      image = var.api_image
+
+      portMappings = [
+        {
+          containerPort = 8080
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = local.db_url
+        },
+        {
+          name  = "REDIS_HOST"
+          value = aws_elasticache_cluster.redis.cache_nodes[0].address
+        },
+        {
+          name  = "SQS_QUEUE_URL"
+          value = aws_sqs_queue.click_events.id
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/api"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_task_definition" "dashboard" {
+  family                   = "dashboard-task"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn            = aws_iam_role.dashboard_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "dashboard"
+      image = var.dashboard_image
+
+      portMappings = [
+        {
+          containerPort = 8081
+          protocol      = "tcp"
+        }
+      ]
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = local.db_url
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/dashboard"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_task_definition" "worker" {
+  family                   = "worker-task"
+  network_mode             = "awsvpc"
+  requires_compatibilities = ["FARGATE"]
+  cpu                      = "256"
+  memory                   = "512"
+  execution_role_arn       = aws_iam_role.ecs_execution_role.arn
+  task_role_arn            = aws_iam_role.worker_task_role.arn
+
+  container_definitions = jsonencode([
+    {
+      name  = "worker"
+      image = var.worker_image
+
+      environment = [
+        {
+          name  = "DATABASE_URL"
+          value = local.db_url
+        },
+        {
+          name  = "SQS_QUEUE_URL"
+          value = aws_sqs_queue.click_events.id
+        },
+        {
+          name  = "HEALTH_PORT"
+          value = "8090"
+        }
+      ]
+
+      logConfiguration = {
+        logDriver = "awslogs"
+        options = {
+          awslogs-group         = "/ecs/worker"
+          awslogs-region        = var.aws_region
+          awslogs-stream-prefix = "ecs"
+        }
+      }
+    }
+  ])
+}
+
+resource "aws_ecs_service" "api" {
+  name            = "api-service"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.api.arn
+  desired_count   = 2
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.api_sg.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.api.arn
+    container_name   = "api"
+    container_port   = 8080
+  }
+
+  depends_on = [
+    aws_lb_listener.http,
+    aws_vpc_endpoint.ecr_api,
+    aws_vpc_endpoint.ecr_dkr,
+    aws_vpc_endpoint.logs,
+    aws_vpc_endpoint.s3
+  ]
+}
+
+resource "aws_ecs_service" "dashboard" {
+  name            = "dashboard-service"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.dashboard.arn
+  desired_count   = 2
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.dashboard_sg.id]
+    assign_public_ip = false
+  }
+
+  load_balancer {
+    target_group_arn = aws_lb_target_group.dashboard.arn
+    container_name   = "dashboard"
+    container_port   = 8081
+  }
+
+  depends_on = [
+    aws_lb_listener.http,
+    aws_vpc_endpoint.ecr_api,
+    aws_vpc_endpoint.ecr_dkr,
+    aws_vpc_endpoint.logs,
+    aws_vpc_endpoint.s3
+  ]
+}
+
+resource "aws_ecs_service" "worker" {
+  name            = "worker-service"
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.worker.arn
+  desired_count   = 1
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets          = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_groups  = [aws_security_group.worker_sg.id]
+    assign_public_ip = false
+  }
+
+  depends_on = [
+    aws_vpc_endpoint.ecr_api,
+    aws_vpc_endpoint.ecr_dkr,
+    aws_vpc_endpoint.logs,
+    aws_vpc_endpoint.s3,
+    aws_vpc_endpoint.sqs
+  ]
+}
