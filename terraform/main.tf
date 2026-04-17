@@ -367,8 +367,6 @@ resource "aws_vpc_endpoint" "sqs" {
 
 
 
-
-
 resource "aws_wafv2_web_acl" "main" {
   name  = "${local.prefix}-waf"
   scope = "REGIONAL"
@@ -409,4 +407,69 @@ resource "aws_wafv2_web_acl" "main" {
 }
 
 
+
+
+resource "aws_sqs_queue" "click_events" {
+  name                       = "${local.prefix}-click-events"
+  visibility_timeout_seconds = 60
+  message_retention_seconds  = 345600
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-click-events"
+  })
+}
+
+######################################
+# Data Layer
+######################################
+
+resource "aws_db_subnet_group" "postgres" {
+  name       = "${local.prefix}-db-subnet-group"
+  subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-db-subnet-group"
+  })
+}
+
+resource "aws_db_instance" "postgres" {
+  identifier             = "${local.prefix}-postgres"
+  engine                 = "postgres"
+  engine_version         = "16.3"
+  instance_class         = "db.t4g.micro"
+  allocated_storage      = 20
+  max_allocated_storage  = 100
+  db_name                = var.db_name
+  username               = var.db_username
+  password               = var.db_password
+  db_subnet_group_name   = aws_db_subnet_group.postgres.name
+  vpc_security_group_ids = [aws_security_group.postgres_sg.id]
+  publicly_accessible    = false
+  skip_final_snapshot    = true
+  multi_az               = false
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-postgres"
+  })
+}
+
+resource "aws_elasticache_subnet_group" "redis" {
+  name       = "${local.prefix}-redis-subnet-group"
+  subnet_ids = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+}
+
+resource "aws_elasticache_cluster" "redis" {
+  cluster_id           = "${local.prefix}-redis"
+  engine               = "redis"
+  node_type            = "cache.t4g.micro"
+  num_cache_nodes      = 1
+  port                 = 6379
+  subnet_group_name    = aws_elasticache_subnet_group.redis.name
+  security_group_ids   = [aws_security_group.redis_sg.id]
+  parameter_group_name = "default.redis7"
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-redis"
+  })
+}
 
