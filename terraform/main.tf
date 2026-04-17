@@ -569,3 +569,90 @@ resource "aws_iam_role_policy" "worker_sqs" {
   policy = data.aws_iam_policy_document.worker_sqs_policy.json
 }
 
+######################################
+# ALB
+######################################
+
+resource "aws_lb" "main" {
+  name               = "${local.prefix}-alb"
+  load_balancer_type = "application"
+  subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  security_groups    = [aws_security_group.alb_sg.id]
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-alb"
+  })
+}
+
+resource "aws_wafv2_web_acl_association" "alb" {
+  resource_arn = aws_lb.main.arn
+  web_acl_arn  = aws_wafv2_web_acl.main.arn
+}
+
+resource "aws_lb_target_group" "api" {
+  name        = "${local.prefix}-api-tg"
+  port        = 8080
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    path                = "/healthz"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-api-tg"
+  })
+}
+
+resource "aws_lb_target_group" "dashboard" {
+  name        = "${local.prefix}-dash-tg"
+  port        = 8081
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.main.id
+  target_type = "ip"
+
+  health_check {
+    path                = "/healthz"
+    protocol            = "HTTP"
+    matcher             = "200-399"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-dashboard-tg"
+  })
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.main.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.api.arn
+  }
+}
+
+resource "aws_lb_listener_rule" "dashboard" {
+  listener_arn = aws_lb_listener.http.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.dashboard.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/summary", "/recent", "/top", "/url/*"]
+    }
+  }
+}
+
