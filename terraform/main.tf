@@ -128,3 +128,177 @@ resource "aws_route_table_association" "private_b" {
   route_table_id = aws_route_table.private.id
 }
 
+
+
+
+resource "aws_security_group" "alb_sg" {
+  name        = "${local.prefix}-alb-sg"
+  description = "Allow HTTP from internet"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-alb-sg"
+  })
+}
+
+resource "aws_security_group" "api_sg" {
+  name        = "${local.prefix}-api-sg"
+  description = "Allow ALB to API"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-api-sg"
+  })
+}
+
+resource "aws_security_group" "dashboard_sg" {
+  name        = "${local.prefix}-dashboard-sg"
+  description = "Allow ALB to Dashboard"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 8081
+    to_port         = 8081
+    protocol        = "tcp"
+    security_groups = [aws_security_group.alb_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-dashboard-sg"
+  })
+}
+
+resource "aws_security_group" "worker_sg" {
+  name        = "${local.prefix}-worker-sg"
+  description = "Worker security group"
+  vpc_id      = aws_vpc.main.id
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-worker-sg"
+  })
+}
+
+resource "aws_security_group" "postgres_sg" {
+  name        = "${local.prefix}-postgres-sg"
+  description = "Allow Postgres from ECS services"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [
+      aws_security_group.api_sg.id,
+      aws_security_group.dashboard_sg.id,
+      aws_security_group.worker_sg.id
+    ]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-postgres-sg"
+  })
+}
+
+resource "aws_security_group" "redis_sg" {
+  name        = "${local.prefix}-redis-sg"
+  description = "Allow Redis from API"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 6379
+    to_port         = 6379
+    protocol        = "tcp"
+    security_groups = [aws_security_group.api_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-redis-sg"
+  })
+}
+
+resource "aws_security_group" "vpce_sg" {
+  name        = "${local.prefix}-vpce-sg"
+  description = "Allow ECS tasks to interface endpoints"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 443
+    to_port         = 443
+    protocol        = "tcp"
+    security_groups = [
+      aws_security_group.api_sg.id,
+      aws_security_group.dashboard_sg.id,
+      aws_security_group.worker_sg.id
+    ]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-vpce-sg"
+  })
+}
+
+
+
