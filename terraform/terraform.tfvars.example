@@ -1,0 +1,4 @@
+db_password     = "replace-me"
+api_image       = "replace-me"
+dashboard_image = "replace-me"
+worker_image    = "replace-me"
