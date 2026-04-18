@@ -72,5 +72,18 @@ variable "worker_image" {
 
 
 
+variable "api_image" {
+  type    = string
+  default = "public.ecr.aws/docker/library/nginx:latest"
+}
 
+variable "dashboard_image" {
+  type    = string
+  default = "public.ecr.aws/docker/library/nginx:latest"
+}
+
+variable "worker_image" {
+  type    = string
+  default = "public.ecr.aws/docker/library/nginx:latest"
+}
 

@@ -13,3 +13,15 @@ output "db_endpoint" {
 output "redis_endpoint" {
   value = aws_elasticache_cluster.redis.cache_nodes[0].address
 }
+
+output "api_ecr_repository_url" {
+  value = aws_ecr_repository.api.repository_url
+}
+
+output "dashboard_ecr_repository_url" {
+  value = aws_ecr_repository.dashboard.repository_url
+}
+
+output "worker_ecr_repository_url" {
+  value = aws_ecr_repository.worker.repository_url
+}
