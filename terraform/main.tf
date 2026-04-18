@@ -226,9 +226,9 @@ resource "aws_security_group" "postgres_sg" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 5432
-    to_port         = 5432
-    protocol        = "tcp"
+    from_port = 5432
+    to_port   = 5432
+    protocol  = "tcp"
     security_groups = [
       aws_security_group.api_sg.id,
       aws_security_group.dashboard_sg.id,
@@ -278,9 +278,9 @@ resource "aws_security_group" "vpce_sg" {
   vpc_id      = aws_vpc.main.id
 
   ingress {
-    from_port       = 443
-    to_port         = 443
-    protocol        = "tcp"
+    from_port = 443
+    to_port   = 443
+    protocol  = "tcp"
     security_groups = [
       aws_security_group.api_sg.id,
       aws_security_group.dashboard_sg.id,
@@ -869,4 +869,46 @@ resource "aws_ecs_service" "worker" {
     aws_vpc_endpoint.s3,
     aws_vpc_endpoint.sqs
   ]
+}
+
+resource "aws_ecr_repository" "api" {
+  name = "${local.prefix}-api"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  force_delete = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-api"
+  })
+}
+
+resource "aws_ecr_repository" "dashboard" {
+  name = "${local.prefix}-dashboard"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  force_delete = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-dashboard"
+  })
+}
+
+resource "aws_ecr_repository" "worker" {
+  name = "${local.prefix}-worker"
+
+  image_scanning_configuration {
+    scan_on_push = true
+  }
+
+  force_delete = true
+
+  tags = merge(local.common_tags, {
+    Name = "${local.prefix}-worker"
+  })
 }
