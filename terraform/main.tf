@@ -23,9 +23,6 @@ locals {
   db_url = "postgres://${var.db_username}:${var.db_password}@${aws_db_instance.postgres.address}:${aws_db_instance.postgres.port}/${var.db_name}?sslmode=disable"
 }
 
-
-
-
 resource "aws_vpc" "main" {
   cidr_block           = var.vpc_cidr
   enable_dns_hostnames = true
@@ -127,9 +124,6 @@ resource "aws_route_table_association" "private_b" {
   subnet_id      = aws_subnet.private_b.id
   route_table_id = aws_route_table.private.id
 }
-
-
-
 
 resource "aws_security_group" "alb_sg" {
   name        = "${local.prefix}-alb-sg"
@@ -300,8 +294,6 @@ resource "aws_security_group" "vpce_sg" {
   })
 }
 
-
-
 resource "aws_vpc_endpoint" "s3" {
   vpc_id            = aws_vpc.main.id
   service_name      = "com.amazonaws.${var.aws_region}.s3"
@@ -365,8 +357,6 @@ resource "aws_vpc_endpoint" "sqs" {
   })
 }
 
-
-
 resource "aws_wafv2_web_acl" "main" {
   name  = "${local.prefix}-waf"
   scope = "REGIONAL"
@@ -406,9 +396,6 @@ resource "aws_wafv2_web_acl" "main" {
   tags = local.common_tags
 }
 
-
-
-
 resource "aws_sqs_queue" "click_events" {
   name                       = "${local.prefix}-click-events"
   visibility_timeout_seconds = 60
@@ -418,10 +405,6 @@ resource "aws_sqs_queue" "click_events" {
     Name = "${local.prefix}-click-events"
   })
 }
-
-######################################
-# Data Layer
-######################################
 
 resource "aws_db_subnet_group" "postgres" {
   name       = "${local.prefix}-db-subnet-group"
@@ -435,7 +418,7 @@ resource "aws_db_subnet_group" "postgres" {
 resource "aws_db_instance" "postgres" {
   identifier             = "${local.prefix}-postgres"
   engine                 = "postgres"
-  engine_version         = "16.3"
+  engine_version         = "16"
   instance_class         = "db.t4g.micro"
   allocated_storage      = 20
   max_allocated_storage  = 100
@@ -473,10 +456,6 @@ resource "aws_elasticache_cluster" "redis" {
   })
 }
 
-######################################
-# CloudWatch Logs
-######################################
-
 resource "aws_cloudwatch_log_group" "api" {
   name              = "/ecs/api"
   retention_in_days = 7
@@ -491,10 +470,6 @@ resource "aws_cloudwatch_log_group" "worker" {
   name              = "/ecs/worker"
   retention_in_days = 7
 }
-
-######################################
-# IAM
-######################################
 
 data "aws_iam_policy_document" "ecs_task_assume_role" {
   statement {
@@ -568,10 +543,6 @@ resource "aws_iam_role_policy" "worker_sqs" {
   role   = aws_iam_role.worker_task_role.id
   policy = data.aws_iam_policy_document.worker_sqs_policy.json
 }
-
-######################################
-# ALB
-######################################
 
 resource "aws_lb" "main" {
   name               = "${local.prefix}-alb"
@@ -655,10 +626,6 @@ resource "aws_lb_listener_rule" "dashboard" {
     }
   }
 }
-
-######################################
-# ECS
-######################################
 
 resource "aws_ecs_cluster" "main" {
   name = "${local.prefix}-cluster"
