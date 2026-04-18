@@ -59,20 +59,6 @@ variable "db_password" {
 }
 
 variable "api_image" {
-  type = string
-}
-
-variable "dashboard_image" {
-  type = string
-}
-
-variable "worker_image" {
-  type = string
-}
-
-
-
-variable "api_image" {
   type    = string
   default = "public.ecr.aws/docker/library/nginx:latest"
 }
@@ -86,4 +72,3 @@ variable "worker_image" {
   type    = string
   default = "public.ecr.aws/docker/library/nginx:latest"
 }
-
